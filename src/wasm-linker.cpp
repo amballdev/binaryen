@@ -22,12 +22,49 @@
 #include "wasm-builder.h"
 #include "wasm-emscripten.h"
 #include "wasm-printing.h"
+#include <vector>
+#include <stdio.h>
+#include <string>
+
 
 using namespace wasm;
+using namespace std;
+
+
+string AbaApi[] = {
+    "memset",
+    "memcpy",
+    "ABA_block_GetTime",
+    "ABA_is_account",
+    "ABA_db_put",
+    "ABA_db_get",
+    "ABA_prints",
+    "ABA_prints_l",
+    "ABA_printi",
+    "ABA_printui",
+    "ABA_printsf",
+    "ABA_printdf",
+    "ABA_read_param",
+    "ABA_assert",
+    "ABA_exit",
+    "ABA_sha256",
+    "ABA_sha512",
+    "ABA_inline_action",
+    "ABA_require_auth",
+    "ABA_token_Existed",
+    "ABA_put_token_info",
+    "ABA_get_token_info",
+    "ABA_add_token_balance",
+    "ABA_sub_token_balance",
+    "ABA_get_token_balance",
+    "ABA_get_token_status",
+    "ABA_put_token_status"
+};
+
+vector<string>api(AbaApi, AbaApi+sizeof(AbaApi)/sizeof(string));
 
 // Name of the dummy function to prevent erroneous nullptr comparisons.
 static constexpr const char* dummyFunction = "__wasm_nullptr";
-static constexpr const char* stackPointer = "__stack_pointer";
 
 void Linker::placeStackPointer(Address stackAllocation) {
   // ensure this is the first allocation
@@ -35,7 +72,7 @@ void Linker::placeStackPointer(Address stackAllocation) {
   const Address pointerSize = 4;
   // Unconditionally allocate space for the stack pointer. Emscripten
   // allocates the stack itself, and initializes the stack pointer itself.
-  out.addStatic(pointerSize, pointerSize, stackPointer);
+  out.addStatic(pointerSize, pointerSize, "__stack_pointer");
   if (stackAllocation) {
     // If we are allocating the stack, set up a relocation to initialize the
     // stack pointer to point to one past-the-end of the stack allocation.
@@ -45,17 +82,24 @@ void Linker::placeStackPointer(Address stackAllocation) {
       LinkerObject::Relocation::kData, (uint32_t*)&raw[0], ".stack", stackAllocation);
     out.addRelocation(relocation);
     assert(out.wasm.memory.segments.empty());
-    out.addSegment(stackPointer, raw);
+    out.addSegment("__stack_pointer", raw);
   }
 }
 
 void Linker::ensureFunctionImport(Name target, std::string signature) {
+  int ret;
   if (!out.wasm.getImportOrNull(target)) {
     auto import = new Import;
     import->name = import->base = target;
     import->module = ENV;
     import->functionType = ensureFunctionType(signature, &out.wasm)->name;
     import->kind = ExternalKind::Function;
+    string name(target.str);
+    ret = std::count(api.begin(), api.end(), name);
+    if(ret == 0){
+        printf("error: unsupported API:%s\n",target.str);
+        exit(1);     
+    }
     out.wasm.addImport(import);
   }
 }
